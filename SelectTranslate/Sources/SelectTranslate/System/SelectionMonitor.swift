@@ -143,9 +143,12 @@ enum AppTraits {
         guard let bundleID = app.bundleIdentifier else { return false }
         if let cached = cache[bundleID] { return cached }
         var result = chromiumBrowsers.contains(bundleID)
-        if !result, let frameworks = app.bundleURL?.appending(path: "Contents/Frameworks") {
+        if !result, let bundleURL = app.bundleURL {
+            let frameworks = bundleURL.appending(path: "Contents/Frameworks")
             let names = (try? FileManager.default.contentsOfDirectory(atPath: frameworks.path)) ?? []
             result = names.contains { $0.hasPrefix("Electron Framework") || $0.hasPrefix("Chromium Embedded Framework") }
+                // 有的 Electron 应用改了框架名（如 Codex 的 "Codex Framework"），但都带 app.asar
+                || FileManager.default.fileExists(atPath: bundleURL.appending(path: "Contents/Resources/app.asar").path)
         }
         cache[bundleID] = result
         return result

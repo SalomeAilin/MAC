@@ -30,7 +30,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         menu.addItem(item("翻译剪贴板", action: #selector(onTranslateClipboard)))
         menu.addItem(.separator())
 
-        menu.addItem(selectionActionItem(current: settings.selectionAction))
+        menu.addItem(selectionActionItem(current: settings.selectionAction, scope: settings.autoTranslateScope, primary: settings.primaryLanguage))
         menu.addItem(targetLanguageItem(current: settings.primaryLanguageCode))
         menu.addItem(.separator())
 
@@ -57,7 +57,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         return item
     }
 
-    private func selectionActionItem(current: SelectionAction) -> NSMenuItem {
+    private func selectionActionItem(current: SelectionAction, scope: AutoTranslateScope, primary: Language) -> NSMenuItem {
         let item = NSMenuItem(title: "选中文字后：\(current.title)", action: nil, keyEquivalent: "")
         let submenu = NSMenu()
         for action in SelectionAction.allCases {
@@ -66,6 +66,17 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             entry.representedObject = action.rawValue
             entry.state = action == current ? .on : .off
             submenu.addItem(entry)
+        }
+        if current != .off {
+            submenu.addItem(.separator())
+            submenu.addItem(.sectionHeader(title: "适用的文字"))
+            for option in AutoTranslateScope.allCases {
+                let entry = NSMenuItem(title: option.title(primary: primary), action: #selector(onSelectScope(_:)), keyEquivalent: "")
+                entry.target = self
+                entry.representedObject = option.rawValue
+                entry.state = option == scope ? .on : .off
+                submenu.addItem(entry)
+            }
         }
         item.submenu = submenu
         return item
@@ -91,6 +102,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     @objc private func onSelectAction(_ sender: NSMenuItem) {
         guard let raw = sender.representedObject as? String, let action = SelectionAction(rawValue: raw) else { return }
         AppSettings.shared.selectionAction = action
+    }
+    @objc private func onSelectScope(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String, let scope = AutoTranslateScope(rawValue: raw) else { return }
+        AppSettings.shared.autoTranslateScope = scope
     }
     @objc private func onGrantPermission() {
         AccessibilityPermission.shared.request()

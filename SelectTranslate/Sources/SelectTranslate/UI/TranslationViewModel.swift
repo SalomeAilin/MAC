@@ -2,10 +2,11 @@ import Foundation
 import Observation
 
 nonisolated enum EngineKind: String, Sendable {
-    case apple, claude
+    case google, apple, claude
 
     var title: String {
         switch self {
+        case .google: "谷歌翻译"
         case .apple: "Apple 翻译"
         case .claude: "Claude"
         }
@@ -13,6 +14,7 @@ nonisolated enum EngineKind: String, Sendable {
 
     var symbol: String {
         switch self {
+        case .google: "globe"
         case .apple: "apple.logo"
         case .claude: "sparkle"
         }
@@ -130,6 +132,7 @@ final class TranslationViewModel {
         dictionaryEntry = nil
 
         var engines: [EngineKind] = []
+        if settings.googleEnabled { engines.append(.google) }
         if settings.appleEnabled { engines.append(.apple) }
         if settings.claudeEnabled { engines.append(.claude) }
         results = engines.map(EngineResult.init)
@@ -156,6 +159,10 @@ final class TranslationViewModel {
         let settings = AppSettings.shared
         do {
             switch result.kind {
+            case .google:
+                let output = try await GoogleTranslator.translate(text, to: target)
+                guard !Task.isCancelled else { return }
+                result.state = .finished(output)
             case .apple:
                 let output = try await AppleTranslator.shared.translate(text, from: source, to: target, mode: settings.appleMode)
                 guard !Task.isCancelled else { return }

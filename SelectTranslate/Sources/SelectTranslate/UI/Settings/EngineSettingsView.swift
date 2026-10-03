@@ -19,6 +19,14 @@ struct EngineSettingsView: View {
     var body: some View {
         Form {
             Section {
+                Toggle("启用谷歌翻译", isOn: $settings.googleEnabled)
+            } header: {
+                Text("谷歌翻译")
+            } footer: {
+                Text("联网翻译，免费，不需要 API Key，译文通常比系统自带的更通顺。选中的文字会发送给谷歌；需要能访问谷歌；使用的是谷歌网页翻译的公开接口（非官方 API），以后可能失效。")
+            }
+
+            Section {
                 Toggle("启用 Apple 翻译", isOn: $settings.appleEnabled)
                 if #available(macOS 26.4, *) {
                     Picker("翻译模式", selection: $settings.appleMode) {

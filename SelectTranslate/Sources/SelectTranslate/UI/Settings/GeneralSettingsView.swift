@@ -27,13 +27,15 @@ struct GeneralSettingsView: View {
                 Picker("选中文字后", selection: $settings.selectionAction) {
                     ForEach(SelectionAction.allCases) { Text($0.title).tag($0) }
                 }
-                if settings.selectionAction == .translate {
-                    Toggle("选中的是\(settings.primaryLanguage.name)时不自动翻译", isOn: $settings.skipAutoTranslateForPrimary)
+                if settings.selectionAction != .off {
+                    Picker("适用的文字", selection: $settings.autoTranslateScope) {
+                        ForEach(AutoTranslateScope.allCases) { Text($0.title(primary: settings.primaryLanguage)).tag($0) }
+                    }
                 }
             } header: {
                 Text("划词")
             } footer: {
-                Text("直接翻译时面板不会抢走键盘焦点，可以照常复制；继续打字、按 Esc 或点击别处时自动关闭。Chrome、VS Code 等 App 无法直接读取选区，会模拟一次 ⌘C 取得文字，随后自动恢复剪贴板。")
+                Text("选中其他文字时不会弹出，需要时按快捷键翻译。直接翻译时面板不会抢走键盘焦点，可以照常复制；继续打字、按 Esc 或点击别处时自动关闭。Chrome、VS Code 等 App 无法直接读取选区，会模拟一次 ⌘C 取得文字，随后自动恢复剪贴板。")
             }
 
             Section("语言") {

@@ -99,6 +99,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .off:
             return
         case .icon:
+            // 读不到文字（浏览器等）时语言未知，仍显示图标
+            if let text, !shouldAutoTranslate(text) { return }
             iconSourceProcessID = processID
             selectionIcon.show(text: text, at: location)
         case .translate:
@@ -121,9 +123,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             selectionLog.notice("skip: selection has no letters")
             return false
         }
-        if settings.skipAutoTranslateForPrimary,
-           LanguageDetector.detect(text).isSameLanguage(as: settings.primaryLanguage) {
-            selectionLog.notice("skip: selection is already in the primary language")
+        let language = LanguageDetector.detect(text)
+        guard settings.autoTranslateScope.allows(language, primary: settings.primaryLanguage) else {
+            selectionLog.notice("skip: \(language.code, privacy: .public) is outside the scope \(self.settings.autoTranslateScope.rawValue, privacy: .public)")
             return false
         }
         return true

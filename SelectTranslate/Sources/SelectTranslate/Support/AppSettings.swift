@@ -15,6 +15,29 @@ nonisolated enum SelectionAction: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
+/// 选中哪些语言的文字时才自动翻译（或显示图标）；快捷键不受限制
+nonisolated enum AutoTranslateScope: String, CaseIterable, Identifiable, Sendable {
+    case english, nonPrimary, all
+
+    var id: Self { self }
+
+    func title(primary: Language) -> String {
+        switch self {
+        case .english: "只有英文"
+        case .nonPrimary: "除\(primary.name)以外的文字"
+        case .all: "所有文字"
+        }
+    }
+
+    func allows(_ language: Language, primary: Language) -> Bool {
+        switch self {
+        case .english: language == .english
+        case .nonPrimary: !language.isSameLanguage(as: primary)
+        case .all: true
+        }
+    }
+}
+
 nonisolated enum AppleTranslationMode: String, CaseIterable, Identifiable, Sendable {
     case automatic, highFidelity, lowLatency
 
@@ -68,10 +91,10 @@ final class AppSettings {
     var primaryLanguageCode: String { didSet { defaults.set(primaryLanguageCode, forKey: Key.primaryLanguage) } }
     var secondaryLanguageCode: String { didSet { defaults.set(secondaryLanguageCode, forKey: Key.secondaryLanguage) } }
     var selectionAction: SelectionAction { didSet { defaults.set(selectionAction.rawValue, forKey: Key.selectionAction) } }
-    /// 直接翻译模式下，选中的文字已经是首选语言时不弹出
-    var skipAutoTranslateForPrimary: Bool { didSet { defaults.set(skipAutoTranslateForPrimary, forKey: Key.skipAutoTranslateForPrimary) } }
+    var autoTranslateScope: AutoTranslateScope { didSet { defaults.set(autoTranslateScope.rawValue, forKey: Key.autoTranslateScope) } }
     var selectionHotkey: KeyCombo? { didSet { saveHotkey(selectionHotkey, forKey: Key.selectionHotkey) } }
     var inputHotkey: KeyCombo? { didSet { saveHotkey(inputHotkey, forKey: Key.inputHotkey) } }
+    var googleEnabled: Bool { didSet { defaults.set(googleEnabled, forKey: Key.googleEnabled) } }
     var appleEnabled: Bool { didSet { defaults.set(appleEnabled, forKey: Key.appleEnabled) } }
     var appleMode: AppleTranslationMode { didSet { defaults.set(appleMode.rawValue, forKey: Key.appleMode) } }
     var dictionaryEnabled: Bool { didSet { defaults.set(dictionaryEnabled, forKey: Key.dictionaryEnabled) } }
@@ -104,13 +127,17 @@ final class AppSettings {
     private init() {
         let defaults = UserDefaults.standard
         let preferred = Language.systemPreferred
-        primaryLanguageCode = defaults.string(forKey: Key.primaryLanguage) ?? preferred.code
+        let primaryCode = defaults.string(forKey: Key.primaryLanguage) ?? preferred.code
+        primaryLanguageCode = primaryCode
         secondaryLanguageCode = defaults.string(forKey: Key.secondaryLanguage)
             ?? (preferred == .english ? Language.simplifiedChinese.code : Language.english.code)
         selectionAction = defaults.string(forKey: Key.selectionAction).flatMap(SelectionAction.init) ?? .translate
-        skipAutoTranslateForPrimary = defaults.object(forKey: Key.skipAutoTranslateForPrimary) as? Bool ?? false
+        // 默认只在选中外文时弹出：中文用户只翻英文，英文用户翻译其他语言
+        autoTranslateScope = defaults.string(forKey: Key.autoTranslateScope).flatMap(AutoTranslateScope.init)
+            ?? (Language.find(primaryCode) == .english ? .nonPrimary : .english)
         selectionHotkey = Self.loadHotkey(forKey: Key.selectionHotkey, default: .defaultSelection)
         inputHotkey = Self.loadHotkey(forKey: Key.inputHotkey, default: .defaultInput)
+        googleEnabled = defaults.object(forKey: Key.googleEnabled) as? Bool ?? true
         appleEnabled = defaults.object(forKey: Key.appleEnabled) as? Bool ?? true
         appleMode = defaults.string(forKey: Key.appleMode).flatMap(AppleTranslationMode.init) ?? .automatic
         dictionaryEnabled = defaults.object(forKey: Key.dictionaryEnabled) as? Bool ?? true
@@ -136,9 +163,10 @@ final class AppSettings {
         static let primaryLanguage = "primaryLanguage"
         static let secondaryLanguage = "secondaryLanguage"
         static let selectionAction = "selectionAction"
-        static let skipAutoTranslateForPrimary = "skipAutoTranslateForPrimary"
+        static let autoTranslateScope = "autoTranslateScope"
         static let selectionHotkey = "selectionHotkey"
         static let inputHotkey = "inputHotkey"
+        static let googleEnabled = "googleEnabled"
         static let appleEnabled = "appleEnabled"
         static let appleMode = "appleMode"
         static let dictionaryEnabled = "dictionaryEnabled"
