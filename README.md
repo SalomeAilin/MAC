@@ -6,9 +6,9 @@
 
 | 项目 | 说明 | 运行环境 |
 | --- | --- | --- |
-| [SelectTranslate](SelectTranslate/README.md) | 原生 Swift 菜单栏翻译工具，默认选中直接翻译，也支持图标、快捷键和系统服务入口 | macOS 26+；构建要求见项目说明 |
+| [SelectTranslate](SelectTranslate/README.md) | 原生 Swift 菜单栏翻译工具：选中英文即在鼠标旁弹出译文，也支持图标、快捷键和系统服务入口 | macOS 26+；构建要求见项目说明 |
 
-SelectTranslate 默认使用 Apple 本机翻译与系统词典，可选的 Claude 引擎需要自行配置 API Key。首次使用 Apple 翻译语言对可能需要下载语言包；开启 Claude 后，待翻译文字会发送到 Anthropic。
+SelectTranslate 默认并排显示谷歌翻译和 Apple 本机翻译，英文单词附带系统词典释义，不需要 API Key。谷歌翻译开启时（默认开启），待翻译文字会发送给谷歌，可以在设置中关闭；首次使用 Apple 翻译语言对可能需要下载语言包。可选的 Claude 引擎需要自行配置 API Key，开启后待翻译文字会发送到 Anthropic。
 
 当前提供源码构建方式，尚未发布供下载的安装包。构建、权限设置及功能限制请阅读各项目的 README。
 
