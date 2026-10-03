@@ -1,0 +1,15 @@
+# macOS metadata
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Local configuration and private files
+/local/
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Runtime logs
+*.log
