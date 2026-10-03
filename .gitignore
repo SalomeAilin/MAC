@@ -13,3 +13,8 @@
 
 # Runtime logs
 *.log
+
+# Temporary editor files
+*.swp
+*.swo
+*~
