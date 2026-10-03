@@ -4,13 +4,14 @@ body:
   - type: markdown
     attributes:
       value: |
-        MAC 当前处于初始化阶段，尚无可运行代码。
+        请注明反馈对应的项目或文件，例如 SelectTranslate。
         请提供与反馈相关的信息，不要填写密码、令牌、个人信息或机器私密配置。
   - type: dropdown
     id: category
     attributes:
       label: 反馈类型
       options:
+        - 使用问题
         - 文档问题
         - 功能建议
         - 其他反馈
@@ -23,6 +24,13 @@ body:
       description: 请说明相关文件或使用场景、当前问题和预期结果。
     validations:
       required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: 系统与运行方式
+      description: 如涉及运行问题，请说明 macOS 版本、项目提交及构建或启动方式。
+    validations:
+      required: false
   - type: textarea
     id: details
     attributes:

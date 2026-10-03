@@ -2,9 +2,15 @@
 
 用于整理 macOS 相关工具、配置和使用文档的开源项目。
 
-## 项目状态
+## 项目
 
-项目处于初始化阶段，目前已建立仓库说明和贡献规范，尚未提供可运行的工具或安装包。实际功能加入后，将同步补充适用的 macOS 版本、运行方法和验证结果。
+| 项目 | 说明 | 运行环境 |
+| --- | --- | --- |
+| [SelectTranslate](SelectTranslate/README.md) | 原生 Swift 菜单栏翻译工具，默认选中直接翻译，也支持图标、快捷键和系统服务入口 | macOS 26+；构建要求见项目说明 |
+
+SelectTranslate 默认使用 Apple 本机翻译与系统词典，可选的 Claude 引擎需要自行配置 API Key。首次使用 Apple 翻译语言对可能需要下载语言包；开启 Claude 后，待翻译文字会发送到 Anthropic。
+
+当前提供源码构建方式，尚未发布供下载的安装包。构建、权限设置及功能限制请阅读各项目的 README。
 
 ## 获取仓库
 
@@ -25,8 +31,9 @@ cd MAC
 | [.editorconfig](.editorconfig)、[.gitattributes](.gitattributes) | 文本格式与换行规则 |
 | [.gitignore](.gitignore) | 本地配置、日志和 macOS 元数据的忽略规则 |
 | [LICENSE](LICENSE) | MIT 许可证 |
+| [SelectTranslate/](SelectTranslate/) | 选中翻译工具的源码、资源与构建脚本 |
 
-代码、测试和配套文档随实际功能加入，按用途归档。本机配置及私有资料放入被 Git 忽略的 `local/` 目录。
+各项目的源码、资源和使用说明放在对应子目录，按用途归档。本机配置及私有资料放入被 Git 忽略的 `local/` 目录；构建输出遵循各项目的忽略规则。
 
 ## 参与贡献
 
