@@ -7,8 +7,9 @@
 #
 # 环境变量：
 #   CONFIG=debug          调试构建（默认 release）
-#   SIGN_IDENTITY="名称"  用钥匙串里的证书签名（默认 ad-hoc 签名）。
-#                         签名身份或内容变化可能影响辅助功能授权；固定证书不保证免重新授权。
+#   SIGN_IDENTITY="名称"  用钥匙串里指定的证书签名；设为 - 时使用 ad-hoc 签名。
+#                         不设置时：运行过 scripts/setup_signing.sh 就用本机签名证书
+#                         （重新编译后辅助功能授权仍然有效），否则使用 ad-hoc 签名。
 #   SELECTTRANSLATE_SCRATCH_PATH  SwiftPM 构建目录（默认 .build）
 #   SELECTTRANSLATE_OUTPUT_DIR    App 输出目录（默认 dist）
 # 使用 xcrun 选择的工具链，遵循 DEVELOPER_DIR / TOOLCHAINS；不修改全局配置。
@@ -16,7 +17,9 @@ set -euo pipefail
 
 APP_NAME="SelectTranslate"
 CONFIG="${CONFIG:-release}"
-SIGN_IDENTITY="${SIGN_IDENTITY:--}"
+SIGN_IDENTITY="${SIGN_IDENTITY:-}"
+LOCAL_SIGNING_KEYCHAIN="$HOME/Library/Keychains/selecttranslate-signing.keychain-db"
+LOCAL_SIGNING_IDENTITY="SelectTranslate Local Signing"
 ACTION="${1:-}"
 
 fail() {
@@ -97,9 +100,25 @@ cp "$BIN_DIR/$APP_NAME" "$APP/Contents/MacOS/$APP_NAME"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 
-echo "▸ 签名（${SIGN_IDENTITY/#-/ad-hoc}）"
-/usr/bin/codesign --force --sign "$SIGN_IDENTITY" "$APP"
+if [[ -n "$SIGN_IDENTITY" ]]; then
+  SIGN_ARGS=(--sign "$SIGN_IDENTITY")
+  SIGN_LABEL="${SIGN_IDENTITY/#-/ad-hoc}"
+elif [[ -f "$LOCAL_SIGNING_KEYCHAIN" ]]; then
+  # 本机签名钥匙串没有密码；重启后处于锁定状态，签名前先解锁
+  /usr/bin/security unlock-keychain -p "" "$LOCAL_SIGNING_KEYCHAIN"
+  SIGN_ARGS=(--sign "$LOCAL_SIGNING_IDENTITY" --keychain "$LOCAL_SIGNING_KEYCHAIN")
+  SIGN_LABEL="$LOCAL_SIGNING_IDENTITY"
+else
+  SIGN_ARGS=(--sign -)
+  SIGN_LABEL="ad-hoc"
+fi
+echo "▸ 签名（${SIGN_LABEL}）"
+/usr/bin/codesign --force "${SIGN_ARGS[@]}" "$APP"
 /usr/bin/codesign --verify --strict "$APP"
+if [[ "$SIGN_LABEL" == ad-hoc ]]; then
+  echo "  提示：ad-hoc 签名每次编译都会变化，更新后需要重新授予辅助功能权限。"
+  echo "  运行一次 scripts/setup_signing.sh 后，重新编译不再需要重新授权。"
+fi
 
 case "$ACTION" in
   install)

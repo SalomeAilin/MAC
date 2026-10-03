@@ -45,10 +45,12 @@
 ```bash
 git clone https://github.com/SalomeAilin/MAC.git
 cd MAC/SelectTranslate
+./scripts/setup_signing.sh
 ./build.sh install
 ```
 
-脚本会编译、打包、签名，安装到 `/Applications`（不可写时用 `~/Applications`）并启动。本机构建的 App 不会被 Gatekeeper 拦截。
+- `setup_signing.sh` 只需运行一次：生成一个只在本机使用的自签名证书，以后每次编译都用它签名。macOS 按「证书 + Bundle ID」识别 App，**重新编译安装后辅助功能授权仍然有效**。证书存放在单独的钥匙串文件中，不改动登录钥匙串和系统信任设置。代价是本机的其他程序也能使用这个证书，开发者电脑上的签名证书都是如此。跳过这一步也能正常使用，只是会改用 ad-hoc 签名，每次更新后都要重新授权。
+- `build.sh install` 会编译、打包、签名，安装到 `/Applications`（不可写时用 `~/Applications`）并启动。本机构建的 App 不会被 Gatekeeper 拦截。
 
 首次启动后需要三步设置：
 
@@ -166,13 +168,13 @@ log show --last 10m --info --predicate 'subsystem == "com.alsay.SelectTranslate"
 <details>
 <summary><b>重新编译安装后不工作了，但系统设置里的开关明明是开着的？</b></summary>
 
-`build.sh` 默认使用 ad-hoc 签名，每次编译后签名都会变，系统设置里那个开关对新版本已经无效。运行下面的命令清掉旧授权并启动 App，再按提示重新打开开关：
+没有运行过 `scripts/setup_signing.sh` 时，`build.sh` 使用 ad-hoc 签名，每次编译后签名都会变，系统设置里那个开关对新版本已经无效。从 ad-hoc 签名切换到证书签名时也是同样的情况。运行下面的命令清掉旧授权并启动 App，再按提示重新打开开关：
 
 ```bash
 tccutil reset Accessibility com.alsay.SelectTranslate; open /Applications/SelectTranslate.app
 ```
 
-这条命令只在重新安装后需要；平时运行它会把当前授权清掉。
+运行过 `scripts/setup_signing.sh` 之后只需要这样做一次，以后重新编译安装不再需要。平时运行这条命令会把当前授权清掉。
 
 </details>
 
@@ -234,6 +236,12 @@ defaults delete com.alsay.SelectTranslate
 security delete-generic-password -s com.alsay.SelectTranslate
 ```
 
+6. 如果运行过 `scripts/setup_signing.sh`，删除本机签名证书：
+
+```bash
+security delete-keychain ~/Library/Keychains/selecttranslate-signing.keychain-db
+```
+
 ## 开发
 
 ### 构建脚本
@@ -249,7 +257,7 @@ security delete-generic-password -s com.alsay.SelectTranslate
 
 | 变量 | 作用 |
 | --- | --- |
-| `SIGN_IDENTITY` | 用钥匙串里的代码签名证书签名（默认 ad-hoc 签名） |
+| `SIGN_IDENTITY` | 用钥匙串里指定的代码签名证书签名，`-` 表示 ad-hoc 签名。不设置时，有 `setup_signing.sh` 创建的本机证书就用它，否则用 ad-hoc 签名 |
 | `SELECTTRANSLATE_SCRATCH_PATH` | SwiftPM 构建目录（默认 `.build`） |
 | `SELECTTRANSLATE_OUTPUT_DIR` | App 输出目录（默认 `dist`） |
 
@@ -260,7 +268,9 @@ SelectTranslate/
 ├── Package.swift                         Swift 6.2，默认 MainActor 隔离
 ├── build.sh                              编译、打包、签名、安装
 ├── Resources/                            Info.plist、App 图标
-├── scripts/make_icon.swift               生成 App 图标
+├── scripts/
+│   ├── setup_signing.sh                  创建本机签名证书（重新编译后保留授权）
+│   └── make_icon.swift                   生成 App 图标
 └── Sources/SelectTranslate/
     ├── main.swift、AppDelegate.swift     启动，串联各种触发方式
     ├── System/
