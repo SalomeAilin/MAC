@@ -9,9 +9,10 @@
 #   CONFIG=debug          调试构建（默认 release）
 #   SIGN_IDENTITY="名称"  用钥匙串里指定的证书签名；设为 - 时使用 ad-hoc 签名。
 #                         不设置时：运行过 scripts/setup_signing.sh 就用本机签名证书
-#                         （重新编译后辅助功能授权仍然有效），否则使用 ad-hoc 签名。
+#                         （用于保持本机构建的签名身份），否则使用 ad-hoc 签名。
 #   SELECTTRANSLATE_SCRATCH_PATH  SwiftPM 构建目录（默认 .build）
 #   SELECTTRANSLATE_OUTPUT_DIR    App 输出目录（默认 dist）
+#   SELECTTRANSLATE_ARCHS         构建架构，以空格分隔；例如 "arm64 x86_64"
 # 使用 xcrun 选择的工具链，遵循 DEVELOPER_DIR / TOOLCHAINS；不修改全局配置。
 set -euo pipefail
 
@@ -47,6 +48,16 @@ IFS=. read -r SDK_MAJOR SDK_MINOR _ <<< "$SDK_VERSION"
   || fail "构建需要 macOS 26.4 或更高版本的 SDK，当前为 ${SDK_VERSION}。"
 
 BUILD_ARGS=(-c "$CONFIG" --sdk "$SDK_PATH")
+if [[ -n "${SELECTTRANSLATE_ARCHS:-}" ]]; then
+  read -r -a BUILD_ARCHS <<< "$SELECTTRANSLATE_ARCHS"
+  [[ ${#BUILD_ARCHS[@]} -gt 0 ]] || fail "SELECTTRANSLATE_ARCHS 不能为空白。"
+  for BUILD_ARCH in "${BUILD_ARCHS[@]}"; do
+    case "$BUILD_ARCH" in
+      arm64|x86_64) BUILD_ARGS+=(--arch "$BUILD_ARCH") ;;
+      *) fail "不支持的构建架构：${BUILD_ARCH}（可用：arm64、x86_64）" ;;
+    esac
+  done
+fi
 if [[ -n "${SELECTTRANSLATE_SCRATCH_PATH:-}" ]]; then
   BUILD_ARGS+=(--scratch-path "$SELECTTRANSLATE_SCRATCH_PATH")
 fi
@@ -116,8 +127,8 @@ echo "▸ 签名（${SIGN_LABEL}）"
 /usr/bin/codesign --force "${SIGN_ARGS[@]}" "$APP"
 /usr/bin/codesign --verify --strict "$APP"
 if [[ "$SIGN_LABEL" == ad-hoc ]]; then
-  echo "  提示：ad-hoc 签名每次编译都会变化，更新后需要重新授予辅助功能权限。"
-  echo "  运行一次 scripts/setup_signing.sh 后，重新编译不再需要重新授权。"
+  echo "  提示：ad-hoc 签名没有 Developer ID 身份，更新后可能需要重新授予辅助功能权限。"
+  echo "  下载分发还受 Gatekeeper 检查；签名校验通过不代表已获 Apple 公证。"
 fi
 
 case "$ACTION" in

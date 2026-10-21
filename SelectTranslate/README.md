@@ -35,28 +35,43 @@
 | 项目 | 要求 |
 | --- | --- |
 | 运行 | macOS 26 或更新版本 |
+| 处理器 | Apple Silicon 或支持 macOS 26 的 Intel Mac |
 | 构建 | Xcode（含 macOS 26.4 或更新的 SDK）、Swift 6.2+ |
 | 权限 | 辅助功能（读取其他 App 中选中的文字） |
 
 ## 安装
 
-本项目只提供源码，请在本机构建。SelectTranslate 是 [MAC](../README.md) 仓库的子项目：
+从 [1.1.0 Release](https://github.com/SalomeAilin/MAC/releases/tag/selecttranslate-v1.1.0) 下载，DMG 和 ZIP 都包含 Apple Silicon / Intel 通用版：
+
+| 文件 | 安装方法 |
+| --- | --- |
+| [SelectTranslate-1.1.0-universal.dmg](https://github.com/SalomeAilin/MAC/releases/download/selecttranslate-v1.1.0/SelectTranslate-1.1.0-universal.dmg) | 打开镜像，将 SelectTranslate 拖入 Applications，再从「应用程序」启动 |
+| [SelectTranslate-1.1.0-universal.zip](https://github.com/SalomeAilin/MAC/releases/download/selecttranslate-v1.1.0/SelectTranslate-1.1.0-universal.zip) | 解压，将 SelectTranslate.app 拖入「应用程序」后启动 |
+| [SHA256SUMS.txt](https://github.com/SalomeAilin/MAC/releases/download/selecttranslate-v1.1.0/SHA256SUMS.txt) | 用于核对下载文件的 SHA-256 校验值 |
+
+下载安装包不需要 Xcode，也不需要运行 `scripts/setup_signing.sh`。
+
+当前发行包使用 ad-hoc 签名，未经 Apple 公证。首次打开若提示无法验证开发者或 Apple 无法检查恶意软件，请先确认文件来自本仓库且下载完整，再按 [Apple 官方流程](https://support.apple.com/en-us/102445) 操作：尝试打开 App 后，进入「系统设置 › 隐私与安全性」，找到该 App 的提示并点「仍要打开」，在随后提示中确认「打开」。
+
+首次启动后需要三步设置：
+
+1. **开启辅助功能权限**：在弹出的提示中点「打开系统设置」，在「隐私与安全性 › 辅助功能」里打开 SelectTranslate，再返回 App 验证取词。
+2. **下载离线语言包**：第一次翻译时点面板里的「下载语言包…」，或在「设置 › 翻译引擎」中下载。只用谷歌翻译的话可以跳过这一步。
+3. **（可选）开机自动运行**：在「设置 › 通用」中打开「登录时自动启动」。
+
+## 从源码构建
+
+SelectTranslate 是 [MAC](../README.md) 仓库的子项目。准备好上面的构建环境后，执行：
 
 ```bash
 git clone https://github.com/SalomeAilin/MAC.git
 cd MAC/SelectTranslate
-./scripts/setup_signing.sh
-./build.sh install
+SIGN_IDENTITY=- ./build.sh install
 ```
 
-- `setup_signing.sh` 只需运行一次：生成一个只在本机使用的自签名证书，以后每次编译都用它签名。macOS 按「证书 + Bundle ID」识别 App，**重新编译安装后辅助功能授权仍然有效**。证书存放在单独的钥匙串文件中，不改动登录钥匙串和系统信任设置。代价是本机的其他程序也能使用这个证书，开发者电脑上的签名证书都是如此。跳过这一步也能正常使用，只是会改用 ad-hoc 签名，每次更新后都要重新授权。
-- `build.sh install` 会编译、打包、签名，安装到 `/Applications`（不可写时用 `~/Applications`）并启动。本机构建的 App 不会被 Gatekeeper 拦截。
+这里显式使用 ad-hoc 签名。脚本将 App 安装到 `/Applications`（不可写时用 `~/Applications`）并启动；目标 App 正在运行时会停止，提示先退出。
 
-首次启动后需要三步设置：
-
-1. **开启辅助功能权限**：在弹出的提示中点「打开系统设置」，在「隐私与安全性 › 辅助功能」里打开 SelectTranslate。打开后立即生效，不用重启 App。
-2. **下载离线语言包**：第一次翻译时点面板里的「下载语言包…」，或在「设置 › 翻译引擎」中下载。只用谷歌翻译的话可以跳过这一步。
-3. **（可选）开机自动运行**：在「设置 › 通用」中打开「登录时自动启动」。
+如需使用已有代码签名身份，可设置 `SIGN_IDENTITY`，详见下方开发章节。`scripts/setup_signing.sh` 是可选的本机自签名工具，不用于分发认证，也不保证更新后保留辅助功能授权。
 
 ## 使用方法
 
@@ -101,8 +116,9 @@ cd MAC/SelectTranslate
 
 ## 隐私
 
-- **谷歌翻译**开启时，选中的文字会发送到谷歌服务器。在「设置 › 翻译引擎」中关闭后，所有翻译都在本机完成。
+- **谷歌翻译**默认开启，待翻译文字会发送到谷歌服务器，可在「设置 › 翻译引擎」中关闭。
 - **Claude** 只在你填入 API Key 并启用后才会使用，文字会发送给 Anthropic；API Key 保存在系统钥匙串里。
+- 只希望在本机翻译时，请同时关闭谷歌翻译和 Claude。Apple 翻译所需的语言包下载完成后，Apple 翻译与系统词典可离线使用。
 - **剪贴板兜底**：在 Chrome 等应用中模拟 `⌘C` 读取选区，读完恢复原来的剪贴板。剪贴板历史工具（如 Paste、Maccy）可能会记下这次复制。
 - **诊断日志**只记录 App 名称和文字长度，不记录文字内容。
 - 不收集任何统计数据。
@@ -143,7 +159,7 @@ flowchart LR
 - 其他语言交给 `NLLanguageRecognizer`；很短的纯 ASCII 文本（如 "OK"）没把握时按英语处理。
 
 **词典**
-- 系统公开的 `DCSCopyTextDefinition` 会把英文 `run` 匹配成拼音 `rùn`，所以改用 DictionaryServices 的私有接口按词条精确匹配。私有接口在运行时用 `dlsym` 加载，不存在时自动跳过词典，不影响翻译。
+- 系统公开的 `DCSCopyTextDefinition` 会把英文 `run` 匹配成拼音 `rùn`，所以改用 DictionaryServices 的私有接口按词条精确匹配。私有接口在运行时用 `dlsym` 加载，不存在时自动跳过词典；系统更新可能改变接口或行为，词典功能不保证兼容所有后续版本。
 - 把词典的纯文本整理成词性、义项、例句分行显示，并去掉中文后附带的拼音。
 - 查不到时做词形还原（`ran → run`、`mice → mouse`），短语动词从主词条中截取对应的小节。
 
@@ -166,15 +182,11 @@ log show --last 10m --info --predicate 'subsystem == "com.alsay.SelectTranslate"
 </details>
 
 <details>
-<summary><b>重新编译安装后不工作了，但系统设置里的开关明明是开着的？</b></summary>
+<summary><b>更新或重新编译后，辅助功能开关开着却不能取词？</b></summary>
 
-没有运行过 `scripts/setup_signing.sh` 时，`build.sh` 使用 ad-hoc 签名，每次编译后签名都会变，系统设置里那个开关对新版本已经无效。从 ad-hoc 签名切换到证书签名时也是同样的情况。运行下面的命令清掉旧授权并启动 App，再按提示重新打开开关：
+先正常退出 App，确认安装位置和运行版本，再检查「系统设置 › 隐私与安全性 › 辅助功能」。签名、程序内容或安装位置变化可能影响系统识别，更新后可能需要重新授权。
 
-```bash
-tccutil reset Accessibility com.alsay.SelectTranslate; open /Applications/SelectTranslate.app
-```
-
-运行过 `scripts/setup_signing.sh` 之后只需要这样做一次，以后重新编译安装不再需要。平时运行这条命令会把当前授权清掉。
+如果旧条目不能使用，可在系统设置中移除它，再添加实际安装的 SelectTranslate.app，启动后验证。保持相同签名身份与 Bundle ID 有助于系统识别，但不保证每次更新都免重新授权。
 
 </details>
 
@@ -258,6 +270,7 @@ security delete-keychain ~/Library/Keychains/selecttranslate-signing.keychain-db
 | 变量 | 作用 |
 | --- | --- |
 | `SIGN_IDENTITY` | 用钥匙串里指定的代码签名证书签名，`-` 表示 ad-hoc 签名。不设置时，有 `setup_signing.sh` 创建的本机证书就用它，否则用 ad-hoc 签名 |
+| `SELECTTRANSLATE_ARCHS` | 指定构建架构，如 `arm64 x86_64`；不设置时构建当前机器的架构 |
 | `SELECTTRANSLATE_SCRATCH_PATH` | SwiftPM 构建目录（默认 `.build`） |
 | `SELECTTRANSLATE_OUTPUT_DIR` | App 输出目录（默认 `dist`） |
 
@@ -269,7 +282,7 @@ SelectTranslate/
 ├── build.sh                              编译、打包、签名、安装
 ├── Resources/                            Info.plist、App 图标
 ├── scripts/
-│   ├── setup_signing.sh                  创建本机签名证书（重新编译后保留授权）
+│   ├── setup_signing.sh                  创建可选的本机自签名证书
 │   └── make_icon.swift                   生成 App 图标
 └── Sources/SelectTranslate/
     ├── main.swift、AppDelegate.swift     启动，串联各种触发方式
