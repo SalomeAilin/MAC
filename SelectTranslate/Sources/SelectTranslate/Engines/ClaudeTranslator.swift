@@ -14,8 +14,16 @@ enum ClaudeTranslator {
         apiKey: String,
         onText: (String) -> Void
     ) async throws {
+        try await respond(text, system: systemPrompt(source: source, target: target), model: model, effort: effort, apiKey: apiKey, onText: onText)
+    }
+
+    /// 工作台与翻译共用请求和流式解析；调用方明确提供本次需要发送的内容。
+    static func respond(
+        _ text: String, system: String, model: ClaudeModel, effort: ClaudeEffort,
+        apiKey: String, onText: (String) -> Void
+    ) async throws {
         try Task.checkCancellation()
-        let request = try makeRequest(text: text, source: source, target: target, model: model, effort: effort, apiKey: apiKey)
+        let request = try makeRequest(text: text, system: system, model: model, effort: effort, apiKey: apiKey)
         let (bytes, response) = try await URLSession.shared.bytes(for: request)
         try Task.checkCancellation()
         guard let http = response as? HTTPURLResponse else {
@@ -57,7 +65,7 @@ enum ClaudeTranslator {
         }
         try Task.checkCancellation()
         guard didStop else {
-            throw TranslationFailure.message("Claude 响应中断，译文不完整，请重试")
+            throw TranslationFailure.message("Claude 响应中断，内容不完整，请重试")
         }
         switch stopReason {
         case "refusal":
@@ -70,14 +78,14 @@ enum ClaudeTranslator {
     }
 
     private static func makeRequest(
-        text: String, source: Language?, target: Language,
+        text: String, system: String,
         model: ClaudeModel, effort: ClaudeEffort, apiKey: String
     ) throws -> URLRequest {
         var body: [String: Any] = [
             "model": model.rawValue,
             "max_tokens": 16_000,
             "stream": true,
-            "system": systemPrompt(source: source, target: target),
+            "system": system,
             "messages": [["role": "user", "content": text]],
         ]
         if model.supportsEffort {

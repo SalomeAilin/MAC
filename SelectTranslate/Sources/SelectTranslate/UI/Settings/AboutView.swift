@@ -20,7 +20,8 @@ struct AboutView: View {
             }
 
             VStack(alignment: .leading, spacing: 12) {
-                tip("cursorarrow.rays", "用鼠标选中文字，翻译自动弹出（可在通用设置中改成显示图标）")
+                tip("cursorarrow.rays", "选中文字后，光标在选区内停留一秒才自动翻译")
+                tip("book.closed", "菜单栏「打开工作台」：日记、网页资料、AI、截图与网络状态")
                 tip("keyboard", "选中文字后按 \(settings.selectionHotkey?.displayString ?? "快捷键")")
                 tip("character.cursor.ibeam", "按 \(settings.inputHotkey?.displayString ?? "快捷键") 打开输入翻译，或在面板里直接修改原文")
                 tip("contextualmenu.and.cursorarrow", "右键菜单 › 服务 › 用 SelectTranslate 翻译")

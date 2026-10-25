@@ -6,16 +6,22 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let translateSelection: () -> Void
     private let inputTranslation: () -> Void
     private let translateClipboard: () -> Void
+    private let openWorkspace: () -> Void
+    private let takeScreenshot: () -> Void
 
     init(translateSelection: @escaping () -> Void,
          inputTranslation: @escaping () -> Void,
-         translateClipboard: @escaping () -> Void) {
+         translateClipboard: @escaping () -> Void,
+         openWorkspace: @escaping () -> Void,
+         takeScreenshot: @escaping () -> Void) {
         self.translateSelection = translateSelection
         self.inputTranslation = inputTranslation
         self.translateClipboard = translateClipboard
+        self.openWorkspace = openWorkspace
+        self.takeScreenshot = takeScreenshot
         super.init()
         statusItem.button?.image = NSImage(systemSymbolName: "translate", accessibilityDescription: "SelectTranslate")
-        statusItem.button?.toolTip = "SelectTranslate 选中翻译"
+        statusItem.button?.toolTip = "SelectTranslate 工作台与划词翻译"
         let menu = NSMenu()
         menu.delegate = self
         statusItem.menu = menu
@@ -25,6 +31,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
         let settings = AppSettings.shared
         menu.removeAllItems()
+        menu.addItem(item("打开工作台", action: #selector(onOpenWorkspace)))
+        menu.addItem(item("区域截图…", action: #selector(onTakeScreenshot)))
+        menu.addItem(.separator())
         menu.addItem(item("翻译选中文字", hotkey: settings.selectionHotkey, action: #selector(onTranslateSelection)))
         menu.addItem(item("输入翻译", hotkey: settings.inputHotkey, action: #selector(onInputTranslation)))
         menu.addItem(item("翻译剪贴板", action: #selector(onTranslateClipboard)))
@@ -97,6 +106,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     }
 
     @objc private func onTranslateSelection() { translateSelection() }
+    @objc private func onOpenWorkspace() { openWorkspace() }
+    @objc private func onTakeScreenshot() { takeScreenshot() }
     @objc private func onInputTranslation() { inputTranslation() }
     @objc private func onTranslateClipboard() { translateClipboard() }
     @objc private func onSelectAction(_ sender: NSMenuItem) {

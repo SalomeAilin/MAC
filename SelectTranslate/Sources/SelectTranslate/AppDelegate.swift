@@ -14,12 +14,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var selectionRequestID = UUID()
     private var iconSourceProcessID: pid_t?
     private var activationObserver: NSObjectProtocol?
+    private var workspace: WorkspaceWindowController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = StatusItemController(
             translateSelection: { [weak self] in self?.translateSelection() },
             inputTranslation: { [weak self] in self?.showInputTranslation() },
-            translateClipboard: { [weak self] in self?.translateClipboard() }
+            translateClipboard: { [weak self] in self?.translateClipboard() },
+            openWorkspace: { [weak self] in self?.openWorkspace() },
+            takeScreenshot: { [weak self] in self?.workspaceController().takeScreenshot() }
         )
 
         panel.onOpenSettings = { SettingsWindowController.shared.show(tab: .engines) }
@@ -52,6 +55,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         observeSettings()
+        configureMainMenu()
+        openWorkspace()
 
         // 首次运行引导开启辅助功能权限（调试时可用 -SkipPermissionPrompt YES 跳过）
         if !permission.isGranted, !UserDefaults.standard.bool(forKey: "SkipPermissionPrompt") {
@@ -62,6 +67,58 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func application(_ application: NSApplication, open urls: [URL]) {
         urls.forEach(handle)
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        openWorkspace()
+        return true
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        workspace?.prepareToClose() == false ? .terminateCancel : .terminateNow
+    }
+
+    private func workspaceController() -> WorkspaceWindowController {
+        if let workspace { return workspace }
+        let controller = WorkspaceWindowController { [weak self] text in
+            self?.cancelSelectionRequest()
+            self?.panel.show(text: text, near: NSEvent.mouseLocation)
+        }
+        workspace = controller
+        return controller
+    }
+
+    @objc private func openWorkspace() { workspaceController().show() }
+    @objc private func openAppSettings() { SettingsWindowController.shared.show() }
+
+    private func configureMainMenu() {
+        let main = NSMenu()
+        let appItem = NSMenuItem(title: "SelectTranslate", action: nil, keyEquivalent: "")
+        let appMenu = NSMenu()
+        let settings = NSMenuItem(title: "设置…", action: #selector(openAppSettings), keyEquivalent: ",")
+        settings.target = self
+        appMenu.addItem(settings)
+        appMenu.addItem(.separator())
+        appMenu.addItem(NSMenuItem(title: "退出 SelectTranslate", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+        appItem.submenu = appMenu
+        main.addItem(appItem)
+        let editItem = NSMenuItem(title: "编辑", action: nil, keyEquivalent: "")
+        let edit = NSMenu(title: "编辑")
+        for (title, action, key) in [
+            ("撤销", NSSelectorFromString("undo:"), "z"),
+            ("剪切", #selector(NSText.cut(_:)), "x"),
+            ("复制", #selector(NSText.copy(_:)), "c"),
+            ("粘贴", #selector(NSText.paste(_:)), "v"),
+            ("全选", #selector(NSText.selectAll(_:)), "a"),
+        ] {
+            edit.addItem(NSMenuItem(title: title, action: action, keyEquivalent: key))
+        }
+        let redo = NSMenuItem(title: "重做", action: NSSelectorFromString("redo:"), keyEquivalent: "z")
+        redo.keyEquivalentModifierMask = [.command, .shift]
+        edit.insertItem(redo, at: 1)
+        editItem.submenu = edit
+        main.addItem(editItem)
+        NSApp.mainMenu = main
     }
 
     // MARK: - 触发方式
@@ -231,6 +288,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             translateSelection()
         case "input":
             showInputTranslation()
+        case "workspace":
+            openWorkspace()
         case "settings":
             cancelSelectionRequest()
             let tab: SettingsTab? = switch query?.first(where: { $0.name == "tab" })?.value {

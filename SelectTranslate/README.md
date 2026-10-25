@@ -5,8 +5,8 @@
 <h1 align="center">SelectTranslate</h1>
 
 <p align="center">
-  <b>macOS 划词翻译</b>：选中英文，光标在选区内停留一秒，译文出现在鼠标旁边。<br>
-  <sub>Select English text and hover over the selection for one second to translate.</sub>
+  <b>Mac 工作台与划词翻译</b>：把日记、网页资料、截图、AI 和网络状态放在一个窗口里。<br>
+  <sub>A native Mac workspace with notes, web excerpts, screenshots, AI, and hover translation.</sub>
 </p>
 
 <p align="center">
@@ -26,9 +26,35 @@
 - **悬停后翻译**：用鼠标拖选、双击或三击选中英文，光标在选区内连续停留一秒后显示翻译；移出后重新计时。面板不抢键盘焦点，可以照常 `⌘C` 复制；继续打字、按 `Esc` 或点击别处时自动关闭。
 - **不打扰**：默认只对英文生效，选中中文不会弹出。也可以改成「除简体中文以外的文字」「所有文字」，或者只显示一个翻译图标。
 - **多引擎对照**：谷歌翻译（联网）和 Apple 翻译（离线）并排显示。英文单词还会附上「词典」App 里的释义（如牛津英汉汉英词典）：音标、义项、例句，能从 ran 找到 run，也能查 take off 这样的短语动词。
-- **几乎所有 App 都能用**：原生 App 通过辅助功能接口读取选区，Chrome、VS Code、Codex 等 Chromium / Electron 应用则模拟一次 `⌘C` 读取，读完自动恢复剪贴板。
+- **全局取词**：原生 App 通过辅助功能接口读取选区，Chrome、VS Code、Codex 等 Chromium / Electron 应用在需要时模拟一次 `⌘C` 读取，读完自动恢复剪贴板。自动悬停还需要 App 提供选区位置，不能提供时可用快捷键或图标。
 - **原生、轻量**：Swift 6 + SwiftUI 编写的菜单栏应用，Liquid Glass 风格面板，没有任何第三方依赖。
-- **免费**：不需要任何 API Key。
+- **基础翻译免费**：谷歌翻译、Apple 翻译与系统词典不需要 API Key；可选的 Claude 翻译和 AI 助手需要自行配置 Anthropic API Key，按用量计费。
+
+## 1.2.0 工作台
+
+启动后显示主窗口，关闭主窗口后划词翻译继续在菜单栏运行。菜单栏的「打开工作台」可以重新打开。
+
+| 入口 | 功能 |
+| --- | --- |
+| 日记与笔记 | 今日日记、新建文字笔记、搜索、自动保存、导出当前正文 |
+| 网页资料 | 主动输入 HTTPS 网址或搜索词，选中文字后预览，再保存摘录或翻译 |
+| AI 助手 | 总结、润色或解释本次输入；可主动附上某篇笔记或截图识别结果，回答可另存为笔记 |
+| 区域截图 | 使用系统选区工具截图，按 Esc 取消；截图保存为笔记附件，可在本机识别文字 |
+| 网络 | 手动调用已安装的 `network-domain-engine status`，显示本次有限检查的结果，并提供系统网络设置入口 |
+
+截图识别结果先显示预览，可以修改后追加到原笔记、翻译，或交给 AI。图片本身不会自动上传；当前 AI 入口处理文字，不直接分析图片。
+
+Mac 首版是文字笔记工作台。iPad 的 PencilKit 画布、手写资料库、`.notesbackup` 导入和跨设备同步尚未接入；不会为了合并窗口改写原有 iPad 数据。
+
+网络入口不自动轮询，不写状态页，不申请管理员权限，也不部署、重启或修改 DNS、代理、路由与分流服务。网络管理仍需沿用网络项目的确认和系统授权流程；一次状态抽查不能代表所有业务长期正常。
+
+### 本地保存
+
+文字笔记保存在用户「资源库 / Application Support / com.alsay.SelectTranslate / Workspace」的 `notes.json`，截图放在同目录的 `Attachments/`。目录按 700、笔记及截图按 600 权限创建；未加密，请自行保护系统账户和备份。
+
+保存采用原子替换。内容损坏、版本不支持或检测到文件被其他程序修改时，会保留原文件并显示错误；未保存的编辑保留在窗口中。保存失败会阻止关闭窗口或正常退出，可先导出当前正文。文字导出不包含截图附件。
+
+网页使用临时网站数据，仅在用户打开网页时联网；关闭工作台会停止加载并清理本次网站数据。网页摘录、笔记与截图均不会自动发送给 AI，发送前可以查看或移除本次附上的文字。
 
 ## 系统要求
 
@@ -38,10 +64,13 @@
 | 处理器 | Apple Silicon 或支持 macOS 26 的 Intel Mac |
 | 构建 | Xcode（含 macOS 26.4 或更新的 SDK）、Swift 6.2+ |
 | 权限 | 辅助功能（读取其他 App 中选中的文字） |
+| 截图 | 使用系统选区工具；屏幕录制授权以 macOS 的实际提示为准 |
 
 ## 安装
 
 从 [1.1.0 Release](https://github.com/SalomeAilin/MAC/releases/tag/selecttranslate-v1.1.0) 下载，DMG 和 ZIP 都包含 Apple Silicon / Intel 通用版：
+
+已发布的 1.1.0 不含上述工作台和悬停计时修改；1.2.0 当前需从源码构建，尚未发布安装包。
 
 | 文件 | 安装方法 |
 | --- | --- |
@@ -230,6 +259,7 @@ Apple 翻译在不支持 Apple 智能的 Mac 上只能用基础引擎，「高�
 | `selecttranslate://translate?text=…` | 翻译指定的文字 |
 | `selecttranslate://selection` | 翻译当前选中的文字 |
 | `selecttranslate://input` | 打开输入翻译 |
+| `selecttranslate://workspace` | 打开工作台 |
 | `selecttranslate://settings?tab=general` | 打开设置（`general` / `engines` / `about`） |
 
 ## 卸载
