@@ -74,6 +74,93 @@ enum SelectionReader {
         return text
     }
 
+    /// 读取选区的屏幕位置。无法取得位置时不自动翻译，避免把停留在别处当成悬停。
+    nonisolated static func selectionBounds(processID: pid_t) async -> [CGRect] {
+        let rects = selectionBoundsInQuartz(processID: processID)
+        let screenTop = await MainActor.run { NSScreen.screens.first?.frame.maxY ?? 0 }
+        // AX 使用主屏左上角原点，NSEvent 的鼠标位置使用左下角原点。
+        return rects.map { CGRect(x: $0.minX, y: screenTop - $0.maxY, width: $0.width, height: $0.height) }
+    }
+
+    private nonisolated static func selectionBoundsInQuartz(processID: pid_t) -> [CGRect] {
+        let app = AXUIElementCreateApplication(processID)
+        AXUIElementSetMessagingTimeout(app, 0.35)
+        var focusedRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(app, kAXFocusedUIElementAttribute as CFString, &focusedRef) == .success,
+              let focusedRef, CFGetTypeID(focusedRef) == AXUIElementGetTypeID()
+        else { return [] }
+        let focused = focusedRef as! AXUIElement
+        for element in [focused] + ancestors(of: focused, withRole: "AXWebArea") {
+            var rangeRef: CFTypeRef?
+            if AXUIElementCopyAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, &rangeRef) == .success,
+               let rangeRef, CFGetTypeID(rangeRef) == AXValueGetTypeID() {
+                var range = CFRange()
+                if AXValueGetValue(rangeRef as! AXValue, .cfRange, &range), range.location >= 0, range.length > 0 {
+                    let rects = selectedLineBounds(element, range: range)
+                    if !rects.isEmpty { return rects }
+                }
+            }
+            var markerRange: CFTypeRef?
+            if AXUIElementCopyAttributeValue(element, "AXSelectedTextMarkerRange" as CFString, &markerRange) == .success,
+               let markerRange,
+               let rect = boundsParameter("AXBoundsForTextMarkerRange", value: markerRange, of: element) {
+                return [rect]
+            }
+        }
+        return []
+    }
+
+    private nonisolated static func selectedLineBounds(_ element: AXUIElement, range: CFRange) -> [CGRect] {
+        // 分行取位置，避免多行选区首尾的空白也触发翻译。
+        var rects: [CGRect] = []
+        var index = range.location
+        let deadline = ContinuousClock.now + .seconds(1)
+        let end = range.location.addingReportingOverflow(range.length)
+        guard !end.overflow else { return [] }
+        while index < end.partialValue, rects.count < 256, ContinuousClock.now < deadline, !Task.isCancelled {
+            var lineRef: CFTypeRef?
+            var lineRangeRef: CFTypeRef?
+            guard AXUIElementCopyParameterizedAttributeValue(element, kAXLineForIndexParameterizedAttribute as CFString, NSNumber(value: index), &lineRef) == .success,
+                  let lineRef,
+                  AXUIElementCopyParameterizedAttributeValue(element, kAXRangeForLineParameterizedAttribute as CFString, lineRef, &lineRangeRef) == .success,
+                  let lineRangeRef, CFGetTypeID(lineRangeRef) == AXValueGetTypeID()
+            else { break }
+            var lineRange = CFRange()
+            guard AXValueGetValue(lineRangeRef as! AXValue, .cfRange, &lineRange),
+                  lineRange.location >= 0, lineRange.length > 0
+            else { break }
+            let lineEnd = lineRange.location.addingReportingOverflow(lineRange.length)
+            guard !lineEnd.overflow else { break }
+            let next = min(end.partialValue, lineEnd.partialValue)
+            guard next > index else { break }
+            var intersection = CFRange(location: index, length: next - index)
+            guard let value = AXValueCreate(.cfRange, &intersection),
+                  let rect = boundsParameter(kAXBoundsForRangeParameterizedAttribute, value: value, of: element)
+            else { break }
+            rects.append(rect)
+            index = next
+        }
+        if index == end.partialValue { return rects }
+        // 不支持分行的控件仍可能提供整个选区的位置。
+        var range = range
+        guard let value = AXValueCreate(.cfRange, &range),
+              let rect = boundsParameter(kAXBoundsForRangeParameterizedAttribute, value: value, of: element)
+        else { return [] }
+        return [rect]
+    }
+
+    private nonisolated static func boundsParameter(_ name: String, value: CFTypeRef, of element: AXUIElement) -> CGRect? {
+        var rectRef: CFTypeRef?
+        guard AXUIElementCopyParameterizedAttributeValue(element, name as CFString, value, &rectRef) == .success,
+              let rectRef, CFGetTypeID(rectRef) == AXValueGetTypeID()
+        else { return nil }
+        var rect = CGRect.zero
+        guard AXValueGetValue(rectRef as! AXValue, .cgRect, &rect),
+              !rect.isNull, !rect.isInfinite, rect.width > 0, rect.height > 0
+        else { return nil }
+        return rect
+    }
+
     /// 向上查找指定角色的祖先元素（最多 12 层）
     private nonisolated static func ancestors(of element: AXUIElement, withRole role: String) -> [AXUIElement] {
         var current = element

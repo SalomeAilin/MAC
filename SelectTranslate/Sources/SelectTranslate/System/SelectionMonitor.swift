@@ -11,22 +11,32 @@ final class SelectionMonitor {
     private var mouseDownLocation: NSPoint = .zero
     private var mouseDownWindow: WindowSnapshot?
     private var pendingCheck: Task<Void, Never>?
+    private var pendingHover: SelectionHover?
+    private var hoverTask: Task<Void, Never>?
+    private var hoverSource: NSRunningApplication?
 
     func start() {
         guard monitors.isEmpty else { return }
         add(.leftMouseDown) { [weak self] _ in self?.mouseDown() }
         add(.leftMouseUp) { [weak self] event in self?.mouseUp(event) }
+        add(.mouseMoved) { [weak self] _ in
+            self?.updateHover()
+        }
         add([.keyDown, .scrollWheel, .rightMouseDown, .otherMouseDown]) { [weak self] event in
             guard !SelectionReader.isOwnCopyEvent(event) else { return }
-            self?.pendingCheck?.cancel()
+            self?.cancelPendingCheck()
             self?.onInterruption?()
         }
         // 自己的窗口不会收到全局监视器事件，也要撤销尚未完成的读取。
-        if let monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .leftMouseDown, .rightMouseDown, .otherMouseDown, .scrollWheel], handler: { [weak self] event in
+        if let monitor = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .keyDown, .leftMouseDown, .rightMouseDown, .otherMouseDown, .scrollWheel], handler: { [weak self] event in
+            if event.type == .mouseMoved {
+                self?.updateHover()
+                return event
+            }
             // 划词图标使用 popUpMenu 层级，必须保留它自己的点击以完成翻译。
             if event.type == .leftMouseDown, event.window?.level == .popUpMenu { return event }
             if !SelectionReader.isOwnCopyEvent(event) {
-                self?.pendingCheck?.cancel()
+                self?.cancelPendingCheck()
                 self?.onInterruption?()
             }
             return event
@@ -40,7 +50,7 @@ final class SelectionMonitor {
         guard !monitors.isEmpty else { return }
         monitors.forEach(NSEvent.removeMonitor)
         monitors.removeAll()
-        pendingCheck?.cancel()
+        cancelPendingCheck()
         selectionLog.notice("selection monitor stopped")
     }
 
@@ -51,10 +61,43 @@ final class SelectionMonitor {
     }
 
     private func mouseDown() {
-        pendingCheck?.cancel()
+        cancelPendingCheck()
         onInterruption?()
         mouseDownLocation = NSEvent.mouseLocation
         mouseDownWindow = WindowSnapshot.under(mouseDownLocation)
+    }
+
+    func cancelPendingCheck() {
+        pendingCheck?.cancel()
+        pendingCheck = nil
+        pendingHover = nil
+        hoverTask?.cancel()
+        hoverTask = nil
+        hoverSource = nil
+    }
+
+    /// 供剪贴板读取完成后复查，避免读取期间移出选区仍然弹出译文。
+    func hasCompletedHover(processID: pid_t) -> Bool {
+        guard hoverSource?.processIdentifier == processID else { return false }
+        return pendingHover?.update(at: NSEvent.mouseLocation) == true
+    }
+
+    private func updateHover() {
+        guard pendingHover != nil, let source = hoverSource else { return }
+        _ = pendingHover?.update(at: NSEvent.mouseLocation)
+        guard pendingHover?.isInside == true else {
+            hoverTask?.cancel()
+            hoverTask = nil
+            return
+        }
+        guard hoverTask == nil else { return }
+        hoverTask = Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(1)) } catch { return }
+            guard !Task.isCancelled, let self,
+                  self.hasCompletedHover(processID: source.processIdentifier)
+            else { return }
+            await self.readSelection(in: source, at: NSEvent.mouseLocation, requiresHover: true)
+        }
     }
 
     private func mouseUp(_ event: NSEvent) {
@@ -81,18 +124,39 @@ final class SelectionMonitor {
             // 给目标 App 一点时间更新选区
             try? await Task.sleep(for: .milliseconds(multiClick ? 90 : 40))
             guard !Task.isCancelled else { return }
-            let selection = await SelectionReader.readViaAccessibility(processID: processID)
-            guard !Task.isCancelled, let self,
-                  NSWorkspace.shared.frontmostApplication?.processIdentifier == processID
+            // 图标模式保留原来的显示方式，自动翻译必须先确认光标停在选区上。
+            if AppSettings.shared.selectionAction == .translate {
+                let bounds = await SelectionReader.selectionBounds(processID: processID)
+                guard !Task.isCancelled, let self, !bounds.isEmpty else { return }
+                self.pendingHover = SelectionHover(bounds: bounds)
+                self.hoverSource = app
+                self.updateHover()
+                return
+            }
+            await self?.readSelection(in: app, at: location, requiresHover: false)
+        }
+    }
+
+    private func readSelection(in app: NSRunningApplication, at location: NSPoint, requiresHover: Bool) async {
+        let processID = app.processIdentifier
+        let selection = await SelectionReader.readViaAccessibility(processID: processID)
+        guard !Task.isCancelled,
+              NSWorkspace.shared.frontmostApplication?.processIdentifier == processID
+        else { return }
+        if requiresHover {
+            let bounds = await SelectionReader.selectionBounds(processID: processID)
+            guard !Task.isCancelled, AppSettings.shared.selectionAction == .translate,
+                  hasCompletedHover(processID: processID),
+                  bounds.contains(where: { $0.contains(NSEvent.mouseLocation) })
             else { return }
-            switch selection {
-            case .text(let text):
-                self.onSelection?(text, location, processID)
-            case .empty, .unsupported:
-                if AppTraits.needsClipboardFallback(app) {
-                    selectionLog.notice("\(appID, privacy: .public) needs clipboard fallback")
-                    self.onSelection?(nil, location, processID)
-                }
+        }
+        switch selection {
+        case .text(let text):
+            onSelection?(text, location, processID)
+        case .empty, .unsupported:
+            if AppTraits.needsClipboardFallback(app) {
+                selectionLog.notice("selection needs clipboard fallback")
+                onSelection?(nil, location, processID)
             }
         }
     }

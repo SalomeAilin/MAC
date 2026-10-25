@@ -44,6 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         activationObserver = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
+                self?.selectionMonitor.cancelPendingCheck()
                 self?.cancelSelectionRequest()
                 self?.selectionIcon.hide()
                 self?.iconSourceProcessID = nil
@@ -109,7 +110,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // text 为 nil：浏览器、Electron 应用读不到 AX 选区，用 ⌘C 读取
                 var text = text
                 if text == nil { text = await SelectionReader.readViaClipboard(processID: processID) }
-                guard isCurrentSelectionRequest(requestID, processID: processID, action: .translate) else { return }
+                guard isCurrentSelectionRequest(requestID, processID: processID, action: .translate),
+                      selectionMonitor.hasCompletedHover(processID: processID)
+                else { return }
                 selectionRequest = nil
                 guard let text, shouldAutoTranslate(text) else { return }
                 selectionLog.notice("auto translate \(text.count, privacy: .public) chars")

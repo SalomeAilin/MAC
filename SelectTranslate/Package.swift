@@ -12,5 +12,6 @@ let package = Package(
                 .defaultIsolation(MainActor.self),
             ]
         ),
+        .testTarget(name: "SelectTranslateTests", dependencies: ["SelectTranslate"]),
     ]
 )
