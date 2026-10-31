@@ -8,7 +8,7 @@ nonisolated enum SelectionAction: String, CaseIterable, Identifiable, Sendable {
     var id: Self { self }
     var title: String {
         switch self {
-        case .translate: "选区悬停一秒后翻译"
+        case .translate: "选区悬停 0.3 秒后翻译"
         case .icon: "显示翻译图标"
         case .off: "不处理（只用快捷键）"
         }

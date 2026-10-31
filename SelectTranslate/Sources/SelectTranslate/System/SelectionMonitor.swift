@@ -92,7 +92,7 @@ final class SelectionMonitor {
         }
         guard hoverTask == nil else { return }
         hoverTask = Task { [weak self] in
-            do { try await Task.sleep(for: .seconds(1)) } catch { return }
+            do { try await Task.sleep(for: SelectionHover.delay) } catch { return }
             guard !Task.isCancelled, let self,
                   self.hasCompletedHover(processID: source.processIdentifier)
             else { return }

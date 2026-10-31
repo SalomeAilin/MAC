@@ -11,23 +11,23 @@ struct SelectionHoverTests {
         #expect(result == ready)
     }
 
-    @Test func requiresOneContinuousSecond() {
+    @Test func requires300MillisecondsOfContinuousHover() {
         var hover = SelectionHover(bounds: [rect])
         let start = ContinuousClock.now
         check(&hover, at: CGPoint(x: 30, y: 25), now: start, ready: false)
-        check(&hover, at: CGPoint(x: 80, y: 25), now: start + .milliseconds(999), ready: false)
-        check(&hover, at: CGPoint(x: 80, y: 25), now: start + .seconds(1), ready: true)
+        check(&hover, at: CGPoint(x: 80, y: 25), now: start + .milliseconds(299), ready: false)
+        check(&hover, at: CGPoint(x: 80, y: 25), now: start + .milliseconds(300), ready: true)
     }
 
     @Test func leavingAndReturningRestartsTheWait() {
         var hover = SelectionHover(bounds: [rect])
         let start = ContinuousClock.now
         check(&hover, at: CGPoint(x: 30, y: 25), now: start, ready: false)
-        check(&hover, at: CGPoint(x: 130, y: 25), now: start + .milliseconds(900), ready: false)
+        check(&hover, at: CGPoint(x: 130, y: 25), now: start + .milliseconds(200), ready: false)
         #expect(!hover.isInside)
         check(&hover, at: CGPoint(x: 30, y: 25), now: start + .seconds(1), ready: false)
-        check(&hover, at: CGPoint(x: 30, y: 25), now: start + .milliseconds(1999), ready: false)
-        check(&hover, at: CGPoint(x: 30, y: 25), now: start + .seconds(2), ready: true)
+        check(&hover, at: CGPoint(x: 30, y: 25), now: start + .milliseconds(1299), ready: false)
+        check(&hover, at: CGPoint(x: 30, y: 25), now: start + .milliseconds(1300), ready: true)
     }
 
     @Test func whitespaceBetweenSelectedLinesResetsTheWait() {

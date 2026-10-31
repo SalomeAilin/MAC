@@ -1,7 +1,8 @@
 import Foundation
 
-/// 只有光标连续停留在选区内一秒才放行；离开后重新计时。
+/// 光标离开选区后重新计时。
 struct SelectionHover {
+    static let delay: Duration = .milliseconds(300)
     let bounds: [CGRect]
     private var enteredAt: ContinuousClock.Instant?
     var isInside: Bool { enteredAt != nil }
@@ -19,6 +20,6 @@ struct SelectionHover {
             self.enteredAt = now
             return false
         }
-        return now - enteredAt >= .seconds(1)
+        return now - enteredAt >= Self.delay
     }
 }
