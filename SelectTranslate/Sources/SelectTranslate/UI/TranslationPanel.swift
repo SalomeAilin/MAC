@@ -48,12 +48,15 @@ final class TranslationPanelController {
     private var isApplyingLayout = false
     private var outsideClickMonitor: Any?
     private var passiveKeyMonitor: Any?
+    private var onPassiveEscape: (() -> Void)?
 
     var isVisible: Bool { panel?.isVisible == true }
 
     /// 显示并翻译。面板已固定时保持原位置（包括被 hideTemporarily 临时隐藏的情况）。
     /// passive：划词自动弹出时不抢键盘焦点，原 App 里可以照常复制、继续打字
-    func show(text: String, near point: NSPoint, notice: String? = nil, passive: Bool = false) {
+    func show(text: String, near point: NSPoint, notice: String? = nil, passive: Bool = false,
+              onEscape: (() -> Void)? = nil) {
+        onPassiveEscape = onEscape
         let keepPosition = panel != nil && model.isPinned
         model.load(text: text, notice: notice)
         present(near: keepPosition ? nil : point, focusInput: text.isBlank && !passive, passive: passive)
@@ -185,6 +188,9 @@ final class TranslationPanelController {
         guard passiveKeyMonitor == nil else { return }
         passiveKeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self, !SelectionReader.isOwnCopyEvent(event) else { return }
+            if Int(event.keyCode) == kVK_Escape, !self.model.isPinned {
+                self.onPassiveEscape?()
+            }
             if Int(event.keyCode) == kVK_Escape || (!self.model.isPinned && !event.modifierFlags.contains(.command)) {
                 self.close()
             }
@@ -192,6 +198,7 @@ final class TranslationPanelController {
     }
 
     private func removePassiveKeyMonitor() {
+        onPassiveEscape = nil
         if let passiveKeyMonitor { NSEvent.removeMonitor(passiveKeyMonitor) }
         passiveKeyMonitor = nil
     }

@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 
 /// 监听全局鼠标：拖选、双击、三击、Shift 点击之后检查是否选中了文字
 final class SelectionMonitor {
@@ -14,6 +15,7 @@ final class SelectionMonitor {
     private var pendingHover: SelectionHover?
     private var hoverTask: Task<Void, Never>?
     private var hoverSource: NSRunningApplication?
+    private var dismissedHover: DismissedHover?
 
     func start() {
         guard monitors.isEmpty else { return }
@@ -23,9 +25,7 @@ final class SelectionMonitor {
             self?.updateHover()
         }
         add([.keyDown, .scrollWheel, .rightMouseDown, .otherMouseDown]) { [weak self] event in
-            guard !SelectionReader.isOwnCopyEvent(event) else { return }
-            self?.cancelPendingCheck()
-            self?.onInterruption?()
+            self?.interrupt(event)
         }
         // 自己的窗口不会收到全局监视器事件，也要撤销尚未完成的读取。
         if let monitor = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .keyDown, .leftMouseDown, .rightMouseDown, .otherMouseDown, .scrollWheel], handler: { [weak self] event in
@@ -35,10 +35,7 @@ final class SelectionMonitor {
             }
             // 划词图标使用 popUpMenu 层级，必须保留它自己的点击以完成翻译。
             if event.type == .leftMouseDown, event.window?.level == .popUpMenu { return event }
-            if !SelectionReader.isOwnCopyEvent(event) {
-                self?.cancelPendingCheck()
-                self?.onInterruption?()
-            }
+            self?.interrupt(event)
             return event
         }) {
             monitors.append(monitor)
@@ -50,7 +47,7 @@ final class SelectionMonitor {
         guard !monitors.isEmpty else { return }
         monitors.forEach(NSEvent.removeMonitor)
         monitors.removeAll()
-        cancelPendingCheck()
+        reset()
         selectionLog.notice("selection monitor stopped")
     }
 
@@ -67,13 +64,65 @@ final class SelectionMonitor {
         mouseDownWindow = WindowSnapshot.under(mouseDownLocation)
     }
 
-    func cancelPendingCheck() {
+    func reset() {
+        cancelPendingCheck()
+        dismissedHover = nil
+    }
+
+    private func cancelPendingCheck() {
         pendingCheck?.cancel()
         pendingCheck = nil
         pendingHover = nil
         hoverTask?.cancel()
         hoverTask = nil
         hoverSource = nil
+    }
+
+    func waitingBounds(processID: pid_t, at point: CGPoint) -> [CGRect]? {
+        guard hoverSource?.processIdentifier == processID, let hover = pendingHover,
+              hover.isWaiting(at: point) else { return nil }
+        return hover.bounds
+    }
+
+    func escapeFeedback(processID: pid_t) -> (() -> Void)? {
+        guard hoverSource?.processIdentifier == processID, let bounds = pendingHover?.bounds,
+              let windowID = mouseDownWindow?.number else { return nil }
+        let shownAt = ContinuousClock.now
+        return { [weak self] in
+            guard NSWorkspace.shared.frontmostApplication?.processIdentifier == processID,
+                  AppSettings.shared.selectionAction == .translate else { return }
+            self?.dismissedHover = DismissedHover(processID: processID, windowID: windowID, bounds: bounds,
+                                                  shownAt: shownAt, escapedAt: .now)
+        }
+    }
+
+    private func checkExtension(_ bounds: [CGRect], processID: pid_t, windowID: CGWindowID?) {
+        guard let dismissedHover else { return }
+        self.dismissedHover = nil
+        if dismissedHover.wasExtended(to: bounds, processID: processID, windowID: windowID, at: .now) {
+            AppSettings.shared.recordHoverFeedback(.extendedAfterEscape)
+        }
+    }
+
+    private func interrupt(_ event: NSEvent) {
+        guard !SelectionReader.isOwnCopyEvent(event), !HotkeyCenter.shared.isSelectionShortcut(event) else { return }
+        cancelPendingCheck()
+        onInterruption?()
+        // 面板自己的 Esc 监听器和全局监听器的回调顺序不固定。
+        if event.type == .keyDown, Int(event.keyCode) == kVK_Escape { return }
+        guard let dismissal = dismissedHover else { return }
+        let arrows = [kVK_LeftArrow, kVK_RightArrow, kVK_UpArrow, kVK_DownArrow]
+        guard event.type == .keyDown, event.modifierFlags.contains(.shift), arrows.contains(Int(event.keyCode)),
+              ContinuousClock.now - dismissal.escapedAt <= DismissedHover.extensionWindow,
+              NSWorkspace.shared.frontmostApplication?.processIdentifier == dismissal.processID
+        else { dismissedHover = nil; return }
+        let windowID = WindowSnapshot.under(NSEvent.mouseLocation)?.number
+        pendingCheck = Task { [weak self] in
+            do { try await Task.sleep(for: .milliseconds(45)) } catch { return }
+            let bounds = await SelectionReader.selectionBounds(processID: dismissal.processID)
+            guard !Task.isCancelled else { return }
+            self?.checkExtension(bounds, processID: dismissal.processID, windowID: windowID)
+        }
     }
 
     /// 供剪贴板读取完成后复查，避免读取期间移出选区仍然弹出译文。
@@ -83,7 +132,7 @@ final class SelectionMonitor {
     }
 
     private func updateHover() {
-        guard pendingHover != nil, let source = hoverSource else { return }
+        guard let delay = pendingHover?.delay, let source = hoverSource else { return }
         _ = pendingHover?.update(at: NSEvent.mouseLocation)
         guard pendingHover?.isInside == true else {
             hoverTask?.cancel()
@@ -92,7 +141,7 @@ final class SelectionMonitor {
         }
         guard hoverTask == nil else { return }
         hoverTask = Task { [weak self] in
-            do { try await Task.sleep(for: SelectionHover.delay) } catch { return }
+            do { try await Task.sleep(for: delay) } catch { return }
             guard !Task.isCancelled, let self,
                   self.hasCompletedHover(processID: source.processIdentifier)
             else { return }
@@ -106,7 +155,7 @@ final class SelectionMonitor {
         let dragged = distance >= 5
         let multiClick = event.clickCount >= 2
         let shiftClick = event.modifierFlags.contains(.shift)
-        guard dragged || multiClick || shiftClick else { return }
+        guard dragged || multiClick || shiftClick else { dismissedHover = nil; return }
         guard let app = NSWorkspace.shared.frontmostApplication,
               app.processIdentifier != ProcessInfo.processInfo.processIdentifier
         else { return }
@@ -115,6 +164,7 @@ final class SelectionMonitor {
 
         // 拖动或缩放窗口时窗口位置会变，不是在选字
         if dragged, let before = mouseDownWindow, let now = before.currentBounds(), now != before.bounds {
+            dismissedHover = nil
             selectionLog.notice("skip: window moved or resized")
             return
         }
@@ -127,8 +177,10 @@ final class SelectionMonitor {
             // 图标模式保留原来的显示方式，自动翻译必须先确认光标停在选区上。
             if AppSettings.shared.selectionAction == .translate {
                 let bounds = await SelectionReader.selectionBounds(processID: processID)
-                guard !Task.isCancelled, let self, !bounds.isEmpty else { return }
-                self.pendingHover = SelectionHover(bounds: bounds)
+                guard !Task.isCancelled, let self else { return }
+                self.checkExtension(bounds, processID: processID, windowID: self.mouseDownWindow?.number)
+                guard !bounds.isEmpty else { return }
+                self.pendingHover = SelectionHover(bounds: bounds, delay: AppSettings.shared.hoverTiming.delay)
                 self.hoverSource = app
                 self.updateHover()
                 return

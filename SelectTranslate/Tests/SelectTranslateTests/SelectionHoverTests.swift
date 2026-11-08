@@ -52,4 +52,59 @@ struct SelectionHoverTests {
         check(&hover, at: .zero, now: start, ready: false)
         check(&hover, at: .zero, now: start + .seconds(10), ready: false)
     }
+
+    @Test func learnedDelayAppliesToTheWholeHover() {
+        let start = ContinuousClock.now
+        let inside = CGPoint(x: 30, y: 25)
+        for ms in [150, 270, 330, 750] {
+            var hover = SelectionHover(bounds: [rect], delay: .milliseconds(ms))
+            check(&hover, at: inside, now: start, ready: false)
+            #expect(hover.isWaiting(at: inside, now: start + .milliseconds(ms - 1)))
+            #expect(!hover.isWaiting(at: .zero, now: start))
+            check(&hover, at: inside, now: start + .milliseconds(ms - 1), ready: false)
+            check(&hover, at: inside, now: start + .milliseconds(ms), ready: true)
+            #expect(!hover.isWaiting(at: inside, now: start + .milliseconds(ms)))
+        }
+    }
+
+    @Test func recentRepeatedFeedbackChangesTheWaitInSmallSteps() {
+        var timing = AdaptiveHoverTiming()
+        timing.record(.earlyShortcut)
+        timing.record(.earlyShortcut)
+        #expect(timing.milliseconds == 300)
+        timing = AdaptiveHoverTiming(saved: timing.savedValues)
+        timing.record(.earlyShortcut)
+        #expect(timing.milliseconds == 270)
+        timing.record(.earlyShortcut)
+        timing.record(.extendedAfterEscape)
+        timing.record(.extendedAfterEscape)
+        #expect(timing.milliseconds == 270)
+        timing.record(.extendedAfterEscape)
+        timing.record(.extendedAfterEscape)
+        #expect(timing.milliseconds == 300)
+    }
+
+    @Test func learningHasLimitsAndInvalidPreferencesStartFresh() {
+        var timing = AdaptiveHoverTiming()
+        for _ in 0..<100 { timing.record(.earlyShortcut) }
+        #expect(timing.milliseconds == 150)
+        for _ in 0..<200 { timing.record(.extendedAfterEscape) }
+        #expect(timing.milliseconds == 750)
+        #expect(AdaptiveHoverTiming(saved: ["milliseconds": -1, "evidence": 0.0]) == AdaptiveHoverTiming())
+        #expect(AdaptiveHoverTiming(saved: ["milliseconds": 330, "evidence": Double.nan]) == AdaptiveHoverTiming())
+    }
+
+    @Test func onlyAQuickEscapeFollowedByExtendingTheOriginalSelectionCounts() throws {
+        let start = ContinuousClock.now
+        let escaped = start + .milliseconds(800)
+        let expanded = rect.union(CGRect(x: 110, y: 20, width: 20, height: 20))
+        let dismissal = try #require(DismissedHover(processID: 1, windowID: 2, bounds: [rect], shownAt: start, escapedAt: escaped))
+        #expect(dismissal.wasExtended(to: [expanded], processID: 1, windowID: 2, at: escaped + .milliseconds(1500)))
+        #expect(!dismissal.wasExtended(to: [rect], processID: 1, windowID: 2, at: escaped))
+        #expect(!dismissal.wasExtended(to: [rect.offsetBy(dx: 120, dy: 0)], processID: 1, windowID: 2, at: escaped))
+        #expect(!dismissal.wasExtended(to: [expanded], processID: 2, windowID: 2, at: escaped))
+        #expect(!dismissal.wasExtended(to: [expanded], processID: 1, windowID: 3, at: escaped))
+        #expect(!dismissal.wasExtended(to: [expanded], processID: 1, windowID: 2, at: escaped + .milliseconds(1501)))
+        #expect(DismissedHover(processID: 1, windowID: 2, bounds: [rect], shownAt: start, escapedAt: escaped + .milliseconds(1)) == nil)
+    }
 }

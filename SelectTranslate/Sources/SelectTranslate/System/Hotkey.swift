@@ -104,6 +104,11 @@ final class HotkeyCenter {
         if !isPaused { registerRef(action) }
     }
 
+    func isSelectionShortcut(_ event: NSEvent) -> Bool {
+        guard event.type == .keyDown, refs[.translateSelection] != nil else { return false }
+        return combos[.translateSelection] == KeyCombo(keyCode: UInt32(event.keyCode), modifiers: event.modifierFlags)
+    }
+
     private func registerRef(_ action: Action) {
         conflicts.remove(action)
         guard let combo = combos[action] else { return }

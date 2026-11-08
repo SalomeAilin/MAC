@@ -8,7 +8,7 @@ nonisolated enum SelectionAction: String, CaseIterable, Identifiable, Sendable {
     var id: Self { self }
     var title: String {
         switch self {
-        case .translate: "选区悬停 0.3 秒后翻译"
+        case .translate: "悬停后自动翻译"
         case .icon: "显示翻译图标"
         case .off: "不处理（只用快捷键）"
         }
@@ -92,6 +92,7 @@ final class AppSettings {
     var secondaryLanguageCode: String { didSet { defaults.set(secondaryLanguageCode, forKey: Key.secondaryLanguage) } }
     var selectionAction: SelectionAction { didSet { defaults.set(selectionAction.rawValue, forKey: Key.selectionAction) } }
     var autoTranslateScope: AutoTranslateScope { didSet { defaults.set(autoTranslateScope.rawValue, forKey: Key.autoTranslateScope) } }
+    private(set) var hoverTiming: AdaptiveHoverTiming
     var selectionHotkey: KeyCombo? { didSet { saveHotkey(selectionHotkey, forKey: Key.selectionHotkey) } }
     var inputHotkey: KeyCombo? { didSet { saveHotkey(inputHotkey, forKey: Key.inputHotkey) } }
     var googleEnabled: Bool { didSet { defaults.set(googleEnabled, forKey: Key.googleEnabled) } }
@@ -108,6 +109,16 @@ final class AppSettings {
 
     var primaryLanguage: Language { Language.find(primaryLanguageCode) ?? .simplifiedChinese }
     var secondaryLanguage: Language { Language.find(secondaryLanguageCode) ?? .english }
+
+    func recordHoverFeedback(_ feedback: AdaptiveHoverTiming.Feedback) {
+        hoverTiming.record(feedback)
+        defaults.set(hoverTiming == AdaptiveHoverTiming() ? nil : hoverTiming.savedValues, forKey: Key.hoverTiming)
+    }
+
+    func resetHoverTiming() {
+        hoverTiming = AdaptiveHoverTiming()
+        defaults.removeObject(forKey: Key.hoverTiming)
+    }
 
     /// 首次读取后缓存，避免每次翻译都访问钥匙串
     var anthropicAPIKey: String? {
@@ -132,6 +143,7 @@ final class AppSettings {
         secondaryLanguageCode = defaults.string(forKey: Key.secondaryLanguage)
             ?? (preferred == .english ? Language.simplifiedChinese.code : Language.english.code)
         selectionAction = defaults.string(forKey: Key.selectionAction).flatMap(SelectionAction.init) ?? .translate
+        hoverTiming = AdaptiveHoverTiming(saved: defaults.dictionary(forKey: Key.hoverTiming))
         // 默认只在选中外文时弹出：中文用户只翻英文，英文用户翻译其他语言
         autoTranslateScope = defaults.string(forKey: Key.autoTranslateScope).flatMap(AutoTranslateScope.init)
             ?? (Language.find(primaryCode) == .english ? .nonPrimary : .english)
@@ -164,6 +176,7 @@ final class AppSettings {
         static let secondaryLanguage = "secondaryLanguage"
         static let selectionAction = "selectionAction"
         static let autoTranslateScope = "autoTranslateScope"
+        static let hoverTiming = "adaptiveHoverTiming"
         static let selectionHotkey = "selectionHotkey"
         static let inputHotkey = "inputHotkey"
         static let googleEnabled = "googleEnabled"

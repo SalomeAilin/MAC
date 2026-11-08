@@ -20,7 +20,7 @@ struct AboutView: View {
             }
 
             VStack(alignment: .leading, spacing: 12) {
-                tip("cursorarrow.rays", "选中文字后，光标在选区内停留 0.3 秒才自动翻译")
+                tip("cursorarrow.rays", "选中文字后，将光标停在选区内，等待时间会随划词习惯调整")
                 tip("book.closed", "菜单栏「打开工作台」：日记、网页资料、AI、截图与网络状态")
                 tip("keyboard", "选中文字后按 \(settings.selectionHotkey?.displayString ?? "快捷键")")
                 tip("character.cursor.ibeam", "按 \(settings.inputHotkey?.displayString ?? "快捷键") 打开输入翻译，或在面板里直接修改原文")

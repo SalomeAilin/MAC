@@ -47,7 +47,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         activationObserver = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
-                self?.selectionMonitor.cancelPendingCheck()
+                self?.selectionMonitor.reset()
                 self?.cancelSelectionRequest()
                 self?.selectionIcon.hide()
                 self?.iconSourceProcessID = nil
@@ -124,7 +124,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - 触发方式
 
     /// 快捷键：读取当前选中的文字并翻译
-    private func translateSelection() {
+    private func translateSelection(fromShortcut: Bool = false) {
         cancelSelectionRequest()
         guard permission.isGranted else {
             permission.request()
@@ -136,13 +136,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if panel.isVisible { panel.hideTemporarily() }
         let location = NSEvent.mouseLocation
         guard let processID = NSWorkspace.shared.frontmostApplication?.processIdentifier else { return }
+        let waiting = fromShortcut && settings.selectionAction == .translate
+            ? selectionMonitor.waitingBounds(processID: processID, at: location) : nil
+        selectionMonitor.reset()
         let requestID = selectionRequestID
         selectionRequest = Task {
+            // 同时核对选区位置，快捷键面板可以在取到文字后立即显示。
+            async let currentBounds: [CGRect] = waiting == nil ? [] : SelectionReader.selectionBounds(processID: processID)
             let text = await SelectionReader.read(processID: processID, allowClipboardFallback: true)
             guard isCurrentSelectionRequest(requestID, processID: processID) else { return }
             selectionRequest = nil
             if let text {
                 panel.show(text: text, near: location)
+                if let waiting, shouldAutoTranslate(text), await currentBounds == waiting,
+                   isCurrentSelectionRequest(requestID, processID: processID, action: .translate) {
+                    settings.recordHoverFeedback(.earlyShortcut)
+                }
             } else {
                 panel.show(text: "", near: location, notice: "没有读取到选中的文字，可以直接在下面输入")
             }
@@ -173,7 +182,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 selectionRequest = nil
                 guard let text, shouldAutoTranslate(text) else { return }
                 selectionLog.notice("auto translate \(text.count, privacy: .public) chars")
-                panel.show(text: text, near: location, passive: true)
+                panel.show(text: text, near: location, passive: true,
+                           onEscape: selectionMonitor.escapeFeedback(processID: processID))
             }
         }
     }
@@ -246,7 +256,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func observeSettings() {
         observations.append(Task { [weak self] in
             for await combo in Observations({ AppSettings.shared.selectionHotkey }) {
-                HotkeyCenter.shared.register(combo, for: .translateSelection) { self?.translateSelection() }
+                HotkeyCenter.shared.register(combo, for: .translateSelection) { self?.translateSelection(fromShortcut: true) }
             }
         })
         observations.append(Task { [weak self] in
@@ -260,6 +270,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 (AppSettings.shared.selectionAction, AccessibilityPermission.shared.isGranted)
             }) {
                 guard let self else { return }
+                self.selectionMonitor.reset()
                 self.cancelSelectionRequest()
                 self.selectionIcon.hide()
                 self.iconSourceProcessID = nil

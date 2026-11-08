@@ -32,10 +32,18 @@ struct GeneralSettingsView: View {
                         ForEach(AutoTranslateScope.allCases) { Text($0.title(primary: settings.primaryLanguage)).tag($0) }
                     }
                 }
+                if settings.selectionAction == .translate {
+                    LabeledContent("当前悬停时间") {
+                        Text("\(settings.hoverTiming.milliseconds) 毫秒").monospacedDigit()
+                        Button("重新学习") { settings.resetHoverTiming() }
+                            .disabled(settings.hoverTiming == AdaptiveHoverTiming())
+                    }
+                }
             } header: {
                 Text("划词")
             } footer: {
-                Text("选中文字后，光标在选区内停留 0.3 秒才自动翻译；移出后重新计时。无法读取选区位置的 App 请用快捷键翻译。面板不会抢走键盘焦点，可以照常复制；继续打字、按 Esc 或点击别处时自动关闭。Chrome、VS Code 等 App 无法直接读取选中文字时，会模拟一次 ⌘C，随后自动恢复剪贴板。")
+                Text("选中后把鼠标停在文字上，移出后重新计时。经常提前按翻译快捷键，等待会缩短。经常在浮窗刚弹出时按 Esc 并继续扩选，等待会延长。学习数据只保存在本机。无法读取选区位置时可用快捷键翻译。")
+                Text("浮窗保留原应用的键盘焦点，继续打字或点击别处会关闭。Chrome、VS Code 等应用需要时会模拟一次 ⌘C 读取选区，随后恢复剪贴板。")
             }
 
             Section("语言") {
